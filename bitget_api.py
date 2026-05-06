@@ -5,7 +5,7 @@ BITGET_BASE  = "https://api.bitget.com"
 PRODUCT_TYPE = "USDT-FUTURES"
 
 GRANULARITY = {
-    "15m": "15min",
+    "15m": "15m",
     "1H":  "1H",
     "4H":  "4H",
 }
@@ -55,9 +55,9 @@ def scan_prices(symbols: list[str]) -> dict:
             t = get_ticker(sym)
             results[sym] = {
                 "price":    float(t["lastPr"]),
-                "change24": float(t.get("change24H", 0)) * 100,
-                "high24":   float(t["high24H"]),
-                "low24":    float(t["low24H"]),
+                "change24": float(t.get("change24h", 0)) * 100,
+                "high24":   float(t["high24h"]),
+                "low24":    float(t["low24h"]),
             }
         except Exception as e:
             print(f"  [WARN] {sym} ticker failed: {e}")

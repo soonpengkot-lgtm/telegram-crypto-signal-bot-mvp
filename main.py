@@ -28,7 +28,7 @@ def get_btc_structures() -> dict:
         except Exception as e:
             print(f"  [WARN] BTC {tf} failed: {e}")
             structures[tf] = "ranging"
-    print(f"  BTC → 15m:{structures['15m']} | 1H:{structures['1H']} | 4H:{structures['4H']}")
+    print(f"  BTC | 15m:{structures['15m']} | 1H:{structures['1H']} | 4H:{structures['4H']}")
     return structures
 
 
