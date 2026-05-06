@@ -25,16 +25,13 @@ def _today() -> str:
 
 
 def can_send_signal(symbol: str, direction: str) -> tuple[bool, str]:
-    """Returns (allowed, block_reason). Empty reason means allowed."""
     state = _load()
     now   = datetime.now(timezone.utc)
 
-    # Daily limit
     daily = state["daily_counts"].get(_today(), 0)
     if daily >= MAX_DAILY_SIGNALS:
         return False, f"Daily limit reached ({MAX_DAILY_SIGNALS}/day)"
 
-    # Cooldown per symbol+direction
     key            = f"{symbol}_{direction}"
     cooldown_until = state["cooldowns"].get(key)
     if cooldown_until:
@@ -47,11 +44,10 @@ def can_send_signal(symbol: str, direction: str) -> tuple[bool, str]:
 
 
 def record_signal(symbol: str, direction: str, signal_data: dict) -> None:
-    """Record a sent signal: update cooldown, daily count, and active signal list."""
     state = _load()
     now   = datetime.now(timezone.utc)
 
-    key = f"{symbol}_{direction}"
+    key   = f"{symbol}_{direction}"
     until = now + timedelta(seconds=COOLDOWN["confirmed"])
     state["cooldowns"][key] = until.isoformat()
 
@@ -62,33 +58,48 @@ def record_signal(symbol: str, direction: str, signal_data: dict) -> None:
         **signal_data,
         "expires_at": (now + timedelta(hours=24)).isoformat(),
     })
-
     _save(state)
 
 
-def check_invalidations(current_prices: dict) -> list[dict]:
+def check_invalidations(current_prices: dict) -> tuple[list[dict], list[dict]]:
     """
-    Compare active signals against current prices.
-    Returns list of signals invalidated (SL broken or expired after 24h).
-    Removes invalidated signals from state.
+    Check active signals against current prices.
+    Returns (invalidated, tp1_reached):
+      - invalidated: SL hit or 24h expired without TP1
+      - tp1_reached: TP1 hit (success — no alert, just remove)
     """
     state        = _load()
     now          = datetime.now(timezone.utc)
     invalidated  = []
+    tp1_reached  = []
     still_active = []
 
     for sig in state.get("active_signals", []):
-        symbol   = sig["symbol"]
-        sl_raw   = sig.get("sl_raw", 0)
-        expires  = datetime.fromisoformat(sig["expires_at"])
-        price_data = current_prices.get(symbol)
-        current    = price_data["price"] if price_data else 0
+        symbol    = sig["symbol"]
+        direction = sig.get("direction", "long")
+        sl_raw    = sig.get("sl_raw", 0)
+        tp1_raw   = sig.get("tp1_raw", 0)
+        expires   = datetime.fromisoformat(sig["expires_at"])
+        pd        = current_prices.get(symbol)
+        price     = pd["price"] if pd else 0
 
-        if now > expires:
-            sig["invalidation_reason"] = "超过 24h 未确认"
+        if price == 0:
+            still_active.append(sig)
+            continue
+
+        sl_hit  = (direction == "long"  and price < sl_raw) or \
+                  (direction == "short" and price > sl_raw)
+        tp1_hit = (direction == "long"  and price >= tp1_raw) or \
+                  (direction == "short" and price <= tp1_raw)
+        expired = now > expires
+
+        if tp1_hit:
+            tp1_reached.append(sig)
+        elif sl_hit:
+            sig["invalidation_reason"] = f"Hit SL {sig['sl']}"
             invalidated.append(sig)
-        elif sl_raw > 0 and current > 0 and current < sl_raw:
-            sig["invalidation_reason"] = f"跌破 SL {sig['sl']}"
+        elif expired:
+            sig["invalidation_reason"] = "24h 未达 TP1 — signal expired"
             invalidated.append(sig)
         else:
             still_active.append(sig)
@@ -97,7 +108,7 @@ def check_invalidations(current_prices: dict) -> list[dict]:
         state["active_signals"] = still_active
         _save(state)
 
-    return invalidated
+    return invalidated, tp1_reached
 
 
 def get_daily_count() -> int:

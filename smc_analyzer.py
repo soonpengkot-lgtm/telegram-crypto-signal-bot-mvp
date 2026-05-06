@@ -1,4 +1,4 @@
-# Candle format from CoinGecko OHLC: [timestamp_ms, open, high, low, close]
+# Candle format: [timestamp_ms, open, high, low, close, ...]
 
 def _o(c): return float(c[1])
 def _h(c): return float(c[2])
@@ -7,7 +7,6 @@ def _c(c): return float(c[4])
 
 
 def find_swing_highs(candles: list, lookback: int = 3) -> list[tuple[int, float]]:
-    """Swing high: candle whose high > N candles on each side."""
     result = []
     n = len(candles)
     for i in range(lookback, n - lookback):
@@ -19,7 +18,6 @@ def find_swing_highs(candles: list, lookback: int = 3) -> list[tuple[int, float]
 
 
 def find_swing_lows(candles: list, lookback: int = 3) -> list[tuple[int, float]]:
-    """Swing low: candle whose low < N candles on each side."""
     result = []
     n = len(candles)
     for i in range(lookback, n - lookback):
@@ -31,7 +29,6 @@ def find_swing_lows(candles: list, lookback: int = 3) -> list[tuple[int, float]]
 
 
 def detect_market_structure(candles: list) -> str:
-    """Returns 'bullish', 'bearish', or 'ranging' from swing structure."""
     highs = find_swing_highs(candles)
     lows  = find_swing_lows(candles)
     if len(highs) < 2 or len(lows) < 2:
@@ -47,11 +44,10 @@ def detect_market_structure(candles: list) -> str:
     return "ranging"
 
 
+# ── Long detections ───────────────────────────────────────────────────
+
 def detect_liquidity_sweep(candles: list) -> tuple[bool, float]:
-    """
-    Long setup: recent candle wicked below a prior swing low, closed above it.
-    Returns (swept, sweep_level).
-    """
+    """Long: wick below prior swing low, closed above it."""
     if len(candles) < 10:
         return False, 0.0
     prior_lows = find_swing_lows(candles[:-3])
@@ -65,10 +61,7 @@ def detect_liquidity_sweep(candles: list) -> tuple[bool, float]:
 
 
 def detect_choch(candles: list) -> tuple[bool, float]:
-    """
-    Bullish CHOCH: a recent candle closes above the last prior swing high.
-    Returns (detected, choch_level).
-    """
+    """Bullish CHOCH: recent close above last prior swing high."""
     if len(candles) < 10:
         return False, 0.0
     prior_highs = find_swing_highs(candles[:-2])
@@ -82,53 +75,104 @@ def detect_choch(candles: list) -> tuple[bool, float]:
 
 
 def detect_bos(candles: list) -> tuple[bool, float]:
-    """
-    Bullish BOS: at least 2 recent closes above a swing high level (structure confirmed).
-    Returns (detected, bos_level).
-    """
+    """Bullish BOS: 2+ recent closes above a swing high level."""
     if len(candles) < 12:
         return False, 0.0
     prior_highs = find_swing_highs(candles[:-4])
     if not prior_highs:
         return False, 0.0
     for _, sh_price in reversed(prior_highs):
-        closes_above = sum(1 for c in candles[-5:] if _c(c) > sh_price)
-        if closes_above >= 2:
+        if sum(1 for c in candles[-5:] if _c(c) > sh_price) >= 2:
             return True, sh_price
     return False, 0.0
 
 
 def find_ob(candles: list, lookback: int = 25) -> tuple[float, float] | None:
-    """
-    Bullish OB: last bearish candle before a bullish impulse that closes above it.
-    Returns (ob_low, ob_high) or None.
-    """
+    """Bullish OB: last bearish candle before bullish impulse closing above it."""
     start = max(0, len(candles) - lookback)
     for i in range(len(candles) - 2, start, -1):
-        c      = candles[i]
-        next_c = candles[i + 1]
-        if _c(c) < _o(c) and _c(next_c) > _o(next_c) and _c(next_c) > _h(c):
+        c, nc = candles[i], candles[i + 1]
+        if _c(c) < _o(c) and _c(nc) > _o(nc) and _c(nc) > _h(c):
             return (_l(c), _h(c))
     return None
 
 
 def find_fvg(candles: list, lookback: int = 20) -> tuple[float, float] | None:
-    """
-    Bullish FVG: gap where candle[i].low > candle[i-2].high.
-    Scans most recent candles first.
-    Returns (fvg_low, fvg_high) or None.
-    """
+    """Bullish FVG: candle[i].low > candle[i-2].high."""
     start = max(2, len(candles) - lookback)
     for i in range(len(candles) - 1, start, -1):
-        gap_low  = _h(candles[i - 2])
-        gap_high = _l(candles[i])
+        gap_low, gap_high = _h(candles[i - 2]), _l(candles[i])
         if gap_high > gap_low:
             return (gap_low, gap_high)
     return None
 
 
+# ── Short detections ──────────────────────────────────────────────────
+
+def detect_liquidity_sweep_short(candles: list) -> tuple[bool, float]:
+    """Short: wick above prior swing high, closed below it."""
+    if len(candles) < 10:
+        return False, 0.0
+    prior_highs = find_swing_highs(candles[:-3])
+    if not prior_highs:
+        return False, 0.0
+    _, sh_price = prior_highs[-1]
+    for c in candles[-4:]:
+        if _h(c) > sh_price and _c(c) < sh_price:
+            return True, sh_price
+    return False, 0.0
+
+
+def detect_choch_bearish(candles: list) -> tuple[bool, float]:
+    """Bearish CHOCH: recent close below last prior swing low."""
+    if len(candles) < 10:
+        return False, 0.0
+    prior_lows = find_swing_lows(candles[:-2])
+    if not prior_lows:
+        return False, 0.0
+    _, sl_price = prior_lows[-1]
+    for c in candles[-4:]:
+        if _c(c) < sl_price:
+            return True, sl_price
+    return False, 0.0
+
+
+def detect_bos_bearish(candles: list) -> tuple[bool, float]:
+    """Bearish BOS: 2+ recent closes below a swing low level."""
+    if len(candles) < 12:
+        return False, 0.0
+    prior_lows = find_swing_lows(candles[:-4])
+    if not prior_lows:
+        return False, 0.0
+    for _, sl_price in reversed(prior_lows):
+        if sum(1 for c in candles[-5:] if _c(c) < sl_price) >= 2:
+            return True, sl_price
+    return False, 0.0
+
+
+def find_ob_bearish(candles: list, lookback: int = 25) -> tuple[float, float] | None:
+    """Bearish OB: last bullish candle before bearish impulse closing below it."""
+    start = max(0, len(candles) - lookback)
+    for i in range(len(candles) - 2, start, -1):
+        c, nc = candles[i], candles[i + 1]
+        if _c(c) > _o(c) and _c(nc) < _o(nc) and _c(nc) < _l(c):
+            return (_l(c), _h(c))
+    return None
+
+
+def find_fvg_bearish(candles: list, lookback: int = 20) -> tuple[float, float] | None:
+    """Bearish FVG: candle[i].high < candle[i-2].low."""
+    start = max(2, len(candles) - lookback)
+    for i in range(len(candles) - 1, start, -1):
+        gap_high, gap_low = _l(candles[i - 2]), _h(candles[i])
+        if gap_high > gap_low:
+            return (gap_low, gap_high)
+    return None
+
+
+# ── Shared helpers ────────────────────────────────────────────────────
+
 def is_near_poi(price: float, poi: tuple[float, float], threshold: float = 0.015) -> bool:
-    """Price is within threshold% of the POI midpoint."""
     poi_mid = (poi[0] + poi[1]) / 2
     return abs(price - poi_mid) / poi_mid <= threshold
 

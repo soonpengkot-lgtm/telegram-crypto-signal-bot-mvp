@@ -3,122 +3,212 @@ from datetime import datetime, timezone
 from bitget_api import get_candles
 from smc_analyzer import (
     detect_market_structure,
-    detect_liquidity_sweep,
-    detect_choch,
-    detect_bos,
-    find_ob,
-    find_fvg,
-    find_swing_highs,
-    find_swing_lows,
-    is_near_poi,
-    calculate_rr,
-    _c,
+    detect_liquidity_sweep, detect_choch, detect_bos,
+    find_ob, find_fvg,
+    detect_liquidity_sweep_short, detect_choch_bearish, detect_bos_bearish,
+    find_ob_bearish, find_fvg_bearish,
+    find_swing_highs, find_swing_lows,
+    is_near_poi, calculate_rr, _c,
 )
-from config import MIN_RR
+from config import RR_THRESHOLDS
 
-_CALL_DELAY = 0.3  # seconds between Bitget candle calls
+_CALL_DELAY = 0.3
 
 
 def _fmt(price: float) -> str:
-    if price >= 1000:
-        return f"{price:,.2f}"
-    elif price >= 1:
-        return f"{price:.4f}"
-    else:
-        return f"{price:.8f}"
+    if price >= 1000:   return f"{price:,.2f}"
+    elif price >= 1:    return f"{price:.4f}"
+    else:               return f"{price:.8f}"
 
 
-def analyze_symbol(symbol: str, btc_4h_structure: str = "ranging") -> dict | None:
-    """
-    3-timeframe SMC analysis: 4H direction → 1H structure/POI → 15m confirmation.
-    Only returns a result when ALL Confirmed conditions are met.
-    Returns None if no signal or RR < 1.5.
-    """
-    try:
-        candles_15m = get_candles(symbol, "15m", limit=100)
-        time.sleep(_CALL_DELAY)
-        candles_1h = get_candles(symbol, "1H", limit=100)
-        time.sleep(_CALL_DELAY)
-        candles_4h = get_candles(symbol, "4H", limit=50)
-        time.sleep(_CALL_DELAY)
-    except Exception as e:
-        print(f"    [FETCH ERROR] {e}")
-        return None
+def _min_rr(symbol: str) -> float:
+    return RR_THRESHOLDS.get(symbol, 1.5)
 
-    if len(candles_15m) < 20 or len(candles_1h) < 10 or len(candles_4h) < 5:
-        return None
 
-    current_price = _c(candles_15m[-1])
+def _btc_filter_long(symbol: str, btc_structures: dict) -> bool:
+    """Long allowed unless BTC 15m or 1H is bearish (for alts). BTC itself uses 4H only."""
+    if symbol == "BTCUSDT":
+        return btc_structures.get("4H", "ranging") != "bearish"
+    return (
+        btc_structures.get("15m", "ranging") != "bearish" and
+        btc_structures.get("1H",  "ranging") != "bearish"
+    )
 
-    # ── 4H: Symbol direction filter ───────────────────────────────────
+
+def _btc_filter_short(symbol: str, btc_structures: dict) -> bool:
+    """Short allowed unless BTC 15m or 1H is bullish (for alts). BTC itself uses 4H only."""
+    if symbol == "BTCUSDT":
+        return btc_structures.get("4H", "ranging") != "bullish"
+    return (
+        btc_structures.get("15m", "ranging") != "bullish" and
+        btc_structures.get("1H",  "ranging") != "bullish"
+    )
+
+
+def _build_long(symbol, candles_15m, candles_1h, candles_4h, btc_structures) -> dict | None:
     struct_4h = detect_market_structure(candles_4h)
     if struct_4h == "bearish":
-        return None  # only long setups; skip bearish 4H
+        return None
+    if not _btc_filter_long(symbol, btc_structures):
+        return None
 
-    # ── 1H: Structure / POI ──────────────────────────────────────────
-    ob_1h          = find_ob(candles_1h)
-    fvg_1h         = find_fvg(candles_1h)
-    bos_1h, _      = detect_bos(candles_1h)
+    current = _c(candles_15m[-1])
 
-    # ── 15m: Confirmation ────────────────────────────────────────────
-    swept,   sweep_level = detect_liquidity_sweep(candles_15m)
-    choch,   _           = detect_choch(candles_15m)
-    bos_15m, _           = detect_bos(candles_15m)
-    ob_15m  = find_ob(candles_15m)
-    fvg_15m = find_fvg(candles_15m)
+    swept, sweep_lvl = detect_liquidity_sweep(candles_15m)
+    choch, _         = detect_choch(candles_15m)
+    bos_15m, _       = detect_bos(candles_15m)
+    bos_1h, _        = detect_bos(candles_1h)
+    ob_15m, fvg_15m  = find_ob(candles_15m), find_fvg(candles_15m)
+    ob_1h,  fvg_1h   = find_ob(candles_1h),  find_fvg(candles_1h)
 
-    # POI: prefer 15m, fall back to 1H
     active_ob  = ob_15m  or ob_1h
     active_fvg = fvg_15m or fvg_1h
-    near_ob    = bool(active_ob  and is_near_poi(current_price, active_ob))
-    near_fvg   = bool(active_fvg and is_near_poi(current_price, active_fvg))
+    near_ob    = bool(active_ob  and is_near_poi(current, active_ob))
+    near_fvg   = bool(active_fvg and is_near_poi(current, active_fvg))
     near_poi   = near_ob or near_fvg
     poi_label  = ("OB" if near_ob else "FVG") if near_poi else None
     bos_ok     = bos_15m or bos_1h
 
-    # ── Levels ───────────────────────────────────────────────────────
     swing_highs = find_swing_highs(candles_15m)
     swing_lows  = find_swing_lows(candles_15m)
 
-    lows_below = [l for _, l in swing_lows if l < current_price]
-    if swept and sweep_level > 0 and sweep_level < current_price:
-        sl_price = sweep_level * 0.998
+    lows_below = [l for _, l in swing_lows if l < current]
+    if swept and sweep_lvl > 0 and sweep_lvl < current:
+        sl_raw = sweep_lvl * 0.998
     elif lows_below:
-        sl_price = max(lows_below) * 0.998
+        sl_raw = max(lows_below) * 0.998
     else:
-        sl_price = current_price * 0.985
+        sl_raw = current * 0.985
 
-    highs_above = sorted([h for _, h in swing_highs if h > current_price])
-    tp1_price = highs_above[0] if highs_above else current_price * 1.02
-    tp2_price = highs_above[1] if len(highs_above) > 1 else current_price + 2 * abs(current_price - sl_price)
+    highs_above = sorted([h for _, h in swing_highs if h > current])
+    tp1_raw = highs_above[0] if highs_above else current * 1.02
+    tp2_raw = highs_above[1] if len(highs_above) > 1 else current + 2 * abs(current - sl_raw)
 
-    rr = calculate_rr(current_price, tp1_price, sl_price)
+    rr      = calculate_rr(current, tp1_raw, sl_raw)
+    min_rr  = _min_rr(symbol)
 
-    # ── Confirmed gate — all must pass ───────────────────────────────
-    btc_ok = btc_4h_structure in ("bullish", "ranging")
-
-    if not (swept and choch and bos_ok and near_poi and btc_ok and rr >= MIN_RR):
+    if not (swept and choch and bos_ok and near_poi and rr >= min_rr):
         return None
 
-    # Build condition list for Telegram message
-    conditions = []
-    conditions.append("Liquidity sweep confirmed")
-    conditions.append("15m Bullish CHOCH")
-    conditions.append("15m BOS confirmed" if bos_15m else "1H BOS confirmed")
-    conditions.append(f"Retesting {poi_label}")
-    conditions.append(f"BTC 4H: {btc_4h_structure}")
-    conditions.append(f"RR {rr:.1f}R ≥ 1.5R")
+    conditions = [
+        "Sweep lower liquidity confirmed",
+        "15m Bullish CHOCH",
+        "15m BOS confirmed" if bos_15m else "1H Bullish BOS confirmed",
+        f"Retesting {poi_label} (holding)",
+        f"BTC filter passed",
+        f"RR {rr:.1f}R ≥ {min_rr}R",
+    ]
 
     return {
         "symbol":     symbol,
         "signal":     "confirmed",
         "direction":  "long",
-        "entry":      _fmt(current_price),
-        "tp1":        _fmt(tp1_price),
-        "tp2":        _fmt(tp2_price),
-        "sl":         _fmt(sl_price),
-        "sl_raw":     sl_price,          # numeric SL for invalidation checks
+        "entry":      _fmt(current),
+        "tp1":        _fmt(tp1_raw),
+        "tp2":        _fmt(tp2_raw),
+        "sl":         _fmt(sl_raw),
+        "sl_raw":     sl_raw,
+        "tp1_raw":    tp1_raw,
         "rr":         rr,
         "conditions": conditions,
         "timestamp":  datetime.now(timezone.utc).isoformat(),
     }
+
+
+def _build_short(symbol, candles_15m, candles_1h, candles_4h, btc_structures) -> dict | None:
+    struct_4h = detect_market_structure(candles_4h)
+    if struct_4h == "bullish":
+        return None
+    if not _btc_filter_short(symbol, btc_structures):
+        return None
+
+    current = _c(candles_15m[-1])
+
+    swept, sweep_lvl  = detect_liquidity_sweep_short(candles_15m)
+    choch, _          = detect_choch_bearish(candles_15m)
+    bos_15m, _        = detect_bos_bearish(candles_15m)
+    bos_1h, _         = detect_bos_bearish(candles_1h)
+    ob_15m, fvg_15m   = find_ob_bearish(candles_15m), find_fvg_bearish(candles_15m)
+    ob_1h,  fvg_1h    = find_ob_bearish(candles_1h),  find_fvg_bearish(candles_1h)
+
+    active_ob  = ob_15m  or ob_1h
+    active_fvg = fvg_15m or fvg_1h
+    near_ob    = bool(active_ob  and is_near_poi(current, active_ob))
+    near_fvg   = bool(active_fvg and is_near_poi(current, active_fvg))
+    near_poi   = near_ob or near_fvg
+    poi_label  = ("OB" if near_ob else "FVG") if near_poi else None
+    bos_ok     = bos_15m or bos_1h
+
+    swing_highs = find_swing_highs(candles_15m)
+    swing_lows  = find_swing_lows(candles_15m)
+
+    highs_above = [h for _, h in swing_highs if h > current]
+    if swept and sweep_lvl > current:
+        sl_raw = sweep_lvl * 1.002
+    elif highs_above:
+        sl_raw = min(highs_above) * 1.002
+    else:
+        sl_raw = current * 1.015
+
+    lows_below = sorted([l for _, l in swing_lows if l < current], reverse=True)
+    tp1_raw = lows_below[0] if lows_below else current * 0.98
+    tp2_raw = lows_below[1] if len(lows_below) > 1 else current - 2 * abs(sl_raw - current)
+
+    rr      = calculate_rr(current, tp1_raw, sl_raw)
+    min_rr  = _min_rr(symbol)
+
+    if not (swept and choch and bos_ok and near_poi and rr >= min_rr):
+        return None
+
+    conditions = [
+        "Sweep upper liquidity confirmed",
+        "15m Bearish CHOCH",
+        "15m BOS confirmed" if bos_15m else "1H Bearish BOS confirmed",
+        f"Retesting {poi_label} (rejected)",
+        f"BTC filter passed",
+        f"RR {rr:.1f}R ≥ {min_rr}R",
+    ]
+
+    return {
+        "symbol":     symbol,
+        "signal":     "confirmed",
+        "direction":  "short",
+        "entry":      _fmt(current),
+        "tp1":        _fmt(tp1_raw),
+        "tp2":        _fmt(tp2_raw),
+        "sl":         _fmt(sl_raw),
+        "sl_raw":     sl_raw,
+        "tp1_raw":    tp1_raw,
+        "rr":         rr,
+        "conditions": conditions,
+        "timestamp":  datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def analyze_symbol(symbol: str, btc_structures: dict) -> list[dict]:
+    """
+    Returns list of confirmed signals for a symbol (Long and/or Short).
+    Fetches candles once and checks both directions.
+    """
+    try:
+        candles_15m = get_candles(symbol, "15m", limit=100)
+        time.sleep(_CALL_DELAY)
+        candles_1h  = get_candles(symbol, "1H",  limit=100)
+        time.sleep(_CALL_DELAY)
+        candles_4h  = get_candles(symbol, "4H",  limit=50)
+        time.sleep(_CALL_DELAY)
+    except Exception as e:
+        print(f"    [FETCH ERROR] {e}")
+        return []
+
+    if len(candles_15m) < 20 or len(candles_1h) < 10 or len(candles_4h) < 5:
+        return []
+
+    results = []
+    long_sig  = _build_long(symbol,  candles_15m, candles_1h, candles_4h, btc_structures)
+    short_sig = _build_short(symbol, candles_15m, candles_1h, candles_4h, btc_structures)
+    if long_sig:
+        results.append(long_sig)
+    if short_sig:
+        results.append(short_sig)
+    return results
