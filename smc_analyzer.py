@@ -183,3 +183,77 @@ def calculate_rr(entry: float, tp: float, sl: float) -> float:
     if risk == 0:
         return 0.0
     return round(reward / risk, 2)
+
+
+# ── RSI & divergence ──────────────────────────────────────────────────
+
+def calculate_rsi(candles: list, period: int = 14) -> list[float]:
+    closes = [_c(c) for c in candles]
+    n = len(closes)
+    rsi_vals = [0.0] * n
+
+    if n < period + 1:
+        return rsi_vals
+
+    gains = [max(closes[i] - closes[i - 1], 0.0) for i in range(1, period + 1)]
+    losses = [max(closes[i - 1] - closes[i], 0.0) for i in range(1, period + 1)]
+    avg_gain = sum(gains) / period
+    avg_loss = sum(losses) / period
+
+    def _rsi(ag, al):
+        return 100.0 if al == 0 else 100.0 - 100.0 / (1.0 + ag / al)
+
+    rsi_vals[period] = _rsi(avg_gain, avg_loss)
+    for i in range(period + 1, n):
+        delta = closes[i] - closes[i - 1]
+        avg_gain = (avg_gain * (period - 1) + max(delta, 0.0)) / period
+        avg_loss = (avg_loss * (period - 1) + max(-delta, 0.0)) / period
+        rsi_vals[i] = _rsi(avg_gain, avg_loss)
+
+    return rsi_vals
+
+
+def detect_rsi_bullish_divergence(
+    candles: list, rsi_period: int = 14, lookback: int = 50, min_bars_apart: int = 5
+) -> bool:
+    """Price makes lower low but RSI makes higher low → bullish divergence."""
+    recent = candles[-lookback:] if len(candles) >= lookback else candles
+    if len(recent) < rsi_period + 10:
+        return False
+
+    rsi_vals = calculate_rsi(recent, rsi_period)
+    lows = [(i, p) for i, p in find_swing_lows(recent) if i >= rsi_period]
+
+    if len(lows) < 2:
+        return False
+
+    idx1, price1 = lows[-2]
+    idx2, price2 = lows[-1]
+
+    if idx2 - idx1 < min_bars_apart:
+        return False
+
+    return price2 < price1 and rsi_vals[idx2] > rsi_vals[idx1]
+
+
+def detect_rsi_bearish_divergence(
+    candles: list, rsi_period: int = 14, lookback: int = 50, min_bars_apart: int = 5
+) -> bool:
+    """Price makes higher high but RSI makes lower high → bearish divergence."""
+    recent = candles[-lookback:] if len(candles) >= lookback else candles
+    if len(recent) < rsi_period + 10:
+        return False
+
+    rsi_vals = calculate_rsi(recent, rsi_period)
+    highs = [(i, p) for i, p in find_swing_highs(recent) if i >= rsi_period]
+
+    if len(highs) < 2:
+        return False
+
+    idx1, price1 = highs[-2]
+    idx2, price2 = highs[-1]
+
+    if idx2 - idx1 < min_bars_apart:
+        return False
+
+    return price2 > price1 and rsi_vals[idx2] < rsi_vals[idx1]

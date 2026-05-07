@@ -3,12 +3,13 @@ from datetime import datetime, timezone
 from bitget_api import get_candles
 from smc_analyzer import (
     detect_market_structure,
-    detect_liquidity_sweep, detect_choch, detect_bos,
+    detect_liquidity_sweep, detect_choch,
     find_ob, find_fvg,
-    detect_liquidity_sweep_short, detect_choch_bearish, detect_bos_bearish,
+    detect_liquidity_sweep_short, detect_choch_bearish,
     find_ob_bearish, find_fvg_bearish,
     find_swing_highs, find_swing_lows,
     is_near_poi, calculate_rr, _c,
+    detect_rsi_bullish_divergence, detect_rsi_bearish_divergence,
 )
 from config import RR_THRESHOLDS
 
@@ -56,8 +57,7 @@ def _build_long(symbol, candles_15m, candles_1h, candles_4h, btc_structures) -> 
 
     swept, sweep_lvl = detect_liquidity_sweep(candles_15m)
     choch, _         = detect_choch(candles_15m)
-    bos_15m, _       = detect_bos(candles_15m)
-    bos_1h, _        = detect_bos(candles_1h)
+    rsi_div          = detect_rsi_bullish_divergence(candles_15m)
     ob_15m, fvg_15m  = find_ob(candles_15m), find_fvg(candles_15m)
     ob_1h,  fvg_1h   = find_ob(candles_1h),  find_fvg(candles_1h)
 
@@ -67,7 +67,6 @@ def _build_long(symbol, candles_15m, candles_1h, candles_4h, btc_structures) -> 
     near_fvg   = bool(active_fvg and is_near_poi(current, active_fvg))
     near_poi   = near_ob or near_fvg
     poi_label  = ("OB" if near_ob else "FVG") if near_poi else None
-    bos_ok     = bos_15m or bos_1h
 
     swing_highs = find_swing_highs(candles_15m)
     swing_lows  = find_swing_lows(candles_15m)
@@ -87,13 +86,13 @@ def _build_long(symbol, candles_15m, candles_1h, candles_4h, btc_structures) -> 
     rr      = calculate_rr(current, tp1_raw, sl_raw)
     min_rr  = _min_rr(symbol)
 
-    if not (swept and choch and bos_ok and near_poi and rr >= min_rr):
+    if not (swept and choch and rsi_div and near_poi and rr >= min_rr):
         return None
 
     conditions = [
         "Sweep lower liquidity confirmed",
         "15m Bullish CHOCH",
-        "15m BOS confirmed" if bos_15m else "1H Bullish BOS confirmed",
+        "RSI bullish divergence (15m)",
         f"Retesting {poi_label} (holding)",
         f"BTC filter passed",
         f"RR {rr:.1f}R ≥ {min_rr}R",
@@ -126,8 +125,7 @@ def _build_short(symbol, candles_15m, candles_1h, candles_4h, btc_structures) ->
 
     swept, sweep_lvl  = detect_liquidity_sweep_short(candles_15m)
     choch, _          = detect_choch_bearish(candles_15m)
-    bos_15m, _        = detect_bos_bearish(candles_15m)
-    bos_1h, _         = detect_bos_bearish(candles_1h)
+    rsi_div           = detect_rsi_bearish_divergence(candles_15m)
     ob_15m, fvg_15m   = find_ob_bearish(candles_15m), find_fvg_bearish(candles_15m)
     ob_1h,  fvg_1h    = find_ob_bearish(candles_1h),  find_fvg_bearish(candles_1h)
 
@@ -137,7 +135,6 @@ def _build_short(symbol, candles_15m, candles_1h, candles_4h, btc_structures) ->
     near_fvg   = bool(active_fvg and is_near_poi(current, active_fvg))
     near_poi   = near_ob or near_fvg
     poi_label  = ("OB" if near_ob else "FVG") if near_poi else None
-    bos_ok     = bos_15m or bos_1h
 
     swing_highs = find_swing_highs(candles_15m)
     swing_lows  = find_swing_lows(candles_15m)
@@ -157,13 +154,13 @@ def _build_short(symbol, candles_15m, candles_1h, candles_4h, btc_structures) ->
     rr      = calculate_rr(current, tp1_raw, sl_raw)
     min_rr  = _min_rr(symbol)
 
-    if not (swept and choch and bos_ok and near_poi and rr >= min_rr):
+    if not (swept and choch and rsi_div and near_poi and rr >= min_rr):
         return None
 
     conditions = [
         "Sweep upper liquidity confirmed",
         "15m Bearish CHOCH",
-        "15m BOS confirmed" if bos_15m else "1H Bearish BOS confirmed",
+        "RSI bearish divergence (15m)",
         f"Retesting {poi_label} (rejected)",
         f"BTC filter passed",
         f"RR {rr:.1f}R ≥ {min_rr}R",
