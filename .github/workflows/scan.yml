@@ -7,7 +7,7 @@ on:
 
 concurrency:
   group: smc-scan
-  cancel-in-progress: true    # new trigger cancels any sleeping run
+  cancel-in-progress: false   # let sleeping run finish so self-dispatch fires
 
 jobs:
   scan:
