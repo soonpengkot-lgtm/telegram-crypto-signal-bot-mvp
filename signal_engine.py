@@ -48,8 +48,8 @@ def _btc_filter_short(symbol: str, btc_structures: dict) -> bool:
 
 def _build_long(symbol, candles_15m, candles_1h, candles_4h, btc_structures) -> dict | None:
     struct_4h = detect_market_structure(candles_4h)
-    if struct_4h == "bearish":
-        print(f"    [LONG] blocked: 4H bearish ({struct_4h})")
+    if struct_4h == "bullish":
+        print(f"    [LONG] blocked: 4H already bullish — no reversal to catch ({struct_4h})")
         return None
     if not _btc_filter_long(symbol, btc_structures):
         print(f"    [LONG] blocked: BTC filter (15m:{btc_structures.get('15m')} 1H:{btc_structures.get('1H')})")
@@ -119,8 +119,8 @@ def _build_long(symbol, candles_15m, candles_1h, candles_4h, btc_structures) -> 
 
 def _build_short(symbol, candles_15m, candles_1h, candles_4h, btc_structures) -> dict | None:
     struct_4h = detect_market_structure(candles_4h)
-    if struct_4h == "bullish":
-        print(f"    [SHORT] blocked: 4H bullish ({struct_4h})")
+    if struct_4h == "bearish":
+        print(f"    [SHORT] blocked: 4H already bearish — no reversal to catch ({struct_4h})")
         return None
     if not _btc_filter_short(symbol, btc_structures):
         print(f"    [SHORT] blocked: BTC filter (15m:{btc_structures.get('15m')} 1H:{btc_structures.get('1H')})")
