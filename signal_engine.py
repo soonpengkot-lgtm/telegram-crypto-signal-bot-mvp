@@ -49,8 +49,10 @@ def _btc_filter_short(symbol: str, btc_structures: dict) -> bool:
 def _build_long(symbol, candles_15m, candles_1h, candles_4h, btc_structures) -> dict | None:
     struct_4h = detect_market_structure(candles_4h)
     if struct_4h == "bearish":
+        print(f"    [LONG] blocked: 4H bearish ({struct_4h})")
         return None
     if not _btc_filter_long(symbol, btc_structures):
+        print(f"    [LONG] blocked: BTC filter (15m:{btc_structures.get('15m')} 1H:{btc_structures.get('1H')})")
         return None
 
     current = _c(candles_15m[-1])
@@ -83,9 +85,10 @@ def _build_long(symbol, candles_15m, candles_1h, candles_4h, btc_structures) -> 
     tp1_raw = highs_above[0] if highs_above else current * 1.02
     tp2_raw = highs_above[1] if len(highs_above) > 1 else current + 2 * abs(current - sl_raw)
 
-    rr      = calculate_rr(current, tp1_raw, sl_raw)
-    min_rr  = _min_rr(symbol)
+    rr     = calculate_rr(current, tp1_raw, sl_raw)
+    min_rr = _min_rr(symbol)
 
+    print(f"    [LONG] sweep={swept} choch={choch} wt_div={rsi_div} near_poi={near_poi} rr={rr:.2f}/{min_rr}")
     if not (swept and choch and rsi_div and near_poi and rr >= min_rr):
         return None
 
@@ -117,8 +120,10 @@ def _build_long(symbol, candles_15m, candles_1h, candles_4h, btc_structures) -> 
 def _build_short(symbol, candles_15m, candles_1h, candles_4h, btc_structures) -> dict | None:
     struct_4h = detect_market_structure(candles_4h)
     if struct_4h == "bullish":
+        print(f"    [SHORT] blocked: 4H bullish ({struct_4h})")
         return None
     if not _btc_filter_short(symbol, btc_structures):
+        print(f"    [SHORT] blocked: BTC filter (15m:{btc_structures.get('15m')} 1H:{btc_structures.get('1H')})")
         return None
 
     current = _c(candles_15m[-1])
@@ -151,9 +156,10 @@ def _build_short(symbol, candles_15m, candles_1h, candles_4h, btc_structures) ->
     tp1_raw = lows_below[0] if lows_below else current * 0.98
     tp2_raw = lows_below[1] if len(lows_below) > 1 else current - 2 * abs(sl_raw - current)
 
-    rr      = calculate_rr(current, tp1_raw, sl_raw)
-    min_rr  = _min_rr(symbol)
+    rr     = calculate_rr(current, tp1_raw, sl_raw)
+    min_rr = _min_rr(symbol)
 
+    print(f"    [SHORT] sweep={swept} choch={choch} wt_div={rsi_div} near_poi={near_poi} rr={rr:.2f}/{min_rr}")
     if not (swept and choch and rsi_div and near_poi and rr >= min_rr):
         return None
 
