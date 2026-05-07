@@ -9,7 +9,7 @@ from smc_analyzer import (
     find_ob_bearish, find_fvg_bearish,
     find_swing_highs, find_swing_lows,
     is_near_poi, calculate_rr, _c,
-    detect_rsi_bullish_divergence, detect_rsi_bearish_divergence,
+    detect_wavetrend_bullish_divergence, detect_wavetrend_bearish_divergence,
 )
 from config import RR_THRESHOLDS
 
@@ -57,7 +57,7 @@ def _build_long(symbol, candles_15m, candles_1h, candles_4h, btc_structures) -> 
 
     swept, sweep_lvl = detect_liquidity_sweep(candles_15m)
     choch, _         = detect_choch(candles_15m)
-    rsi_div          = detect_rsi_bullish_divergence(candles_15m)
+    rsi_div          = detect_wavetrend_bullish_divergence(candles_15m)
     ob_15m, fvg_15m  = find_ob(candles_15m), find_fvg(candles_15m)
     ob_1h,  fvg_1h   = find_ob(candles_1h),  find_fvg(candles_1h)
 
@@ -92,7 +92,7 @@ def _build_long(symbol, candles_15m, candles_1h, candles_4h, btc_structures) -> 
     conditions = [
         "Sweep lower liquidity confirmed",
         "15m Bullish CHOCH",
-        "RSI bullish divergence (15m)",
+        "WaveTrend bullish divergence (15m)",
         f"Retesting {poi_label} (holding)",
         f"BTC filter passed",
         f"RR {rr:.1f}R ≥ {min_rr}R",
@@ -125,7 +125,7 @@ def _build_short(symbol, candles_15m, candles_1h, candles_4h, btc_structures) ->
 
     swept, sweep_lvl  = detect_liquidity_sweep_short(candles_15m)
     choch, _          = detect_choch_bearish(candles_15m)
-    rsi_div           = detect_rsi_bearish_divergence(candles_15m)
+    rsi_div           = detect_wavetrend_bearish_divergence(candles_15m)
     ob_15m, fvg_15m   = find_ob_bearish(candles_15m), find_fvg_bearish(candles_15m)
     ob_1h,  fvg_1h    = find_ob_bearish(candles_1h),  find_fvg_bearish(candles_1h)
 
@@ -160,7 +160,7 @@ def _build_short(symbol, candles_15m, candles_1h, candles_4h, btc_structures) ->
     conditions = [
         "Sweep upper liquidity confirmed",
         "15m Bearish CHOCH",
-        "RSI bearish divergence (15m)",
+        "WaveTrend bearish divergence (15m)",
         f"Retesting {poi_label} (rejected)",
         f"BTC filter passed",
         f"RR {rr:.1f}R ≥ {min_rr}R",

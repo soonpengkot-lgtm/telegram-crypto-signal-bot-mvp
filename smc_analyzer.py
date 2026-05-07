@@ -257,3 +257,71 @@ def detect_rsi_bearish_divergence(
         return False
 
     return price2 > price1 and rsi_vals[idx2] < rsi_vals[idx1]
+
+
+# ── WaveTrend & divergence ────────────────────────────────────────────
+
+def _ema(values: list, period: int) -> list:
+    result = [0.0] * len(values)
+    if not values:
+        return result
+    k = 2.0 / (period + 1)
+    result[0] = values[0]
+    for i in range(1, len(values)):
+        result[i] = values[i] * k + result[i - 1] * (1 - k)
+    return result
+
+
+def calculate_wavetrend(candles: list, n1: int = 10, n2: int = 21) -> tuple:
+    """WaveTrend Oscillator (LazyBear). Returns (wt1, wt2)."""
+    hlc3 = [(_h(c) + _l(c) + _c(c)) / 3.0 for c in candles]
+    esa  = _ema(hlc3, n1)
+    d    = _ema([abs(hlc3[i] - esa[i]) for i in range(len(candles))], n1)
+    ci   = [(hlc3[i] - esa[i]) / (0.015 * d[i]) if d[i] != 0 else 0.0
+            for i in range(len(candles))]
+    wt1  = _ema(ci, n2)
+    n    = len(candles)
+    wt2  = [sum(wt1[max(0, i - 3):i + 1]) / min(4, i + 1) for i in range(n)]
+    return wt1, wt2
+
+
+def detect_wavetrend_bullish_divergence(
+    candles: list, n1: int = 10, n2: int = 21, lookback: int = 50,
+    min_bars_apart: int = 5, oversold: float = -60.0
+) -> bool:
+    """Price lower low + WT1 higher low, both in oversold zone → bullish divergence."""
+    recent  = candles[-lookback:] if len(candles) >= lookback else candles
+    warmup  = n1 + n2
+    if len(recent) < warmup + 5:
+        return False
+    wt1, _  = calculate_wavetrend(recent, n1, n2)
+    lows    = [(i, p) for i, p in find_swing_lows(recent)
+               if i >= warmup and wt1[i] < oversold]
+    if len(lows) < 2:
+        return False
+    idx1, price1 = lows[-2]
+    idx2, price2 = lows[-1]
+    if idx2 - idx1 < min_bars_apart:
+        return False
+    return price2 < price1 and wt1[idx2] > wt1[idx1]
+
+
+def detect_wavetrend_bearish_divergence(
+    candles: list, n1: int = 10, n2: int = 21, lookback: int = 50,
+    min_bars_apart: int = 5, overbought: float = 60.0
+) -> bool:
+    """Price higher high + WT1 lower high, both in overbought zone → bearish divergence."""
+    recent  = candles[-lookback:] if len(candles) >= lookback else candles
+    warmup  = n1 + n2
+    if len(recent) < warmup + 5:
+        return False
+    wt1, _  = calculate_wavetrend(recent, n1, n2)
+    highs   = [(i, p) for i, p in find_swing_highs(recent)
+               if i >= warmup and wt1[i] > overbought]
+    if len(highs) < 2:
+        return False
+    idx1, price1 = highs[-2]
+    idx2, price2 = highs[-1]
+    if idx2 - idx1 < min_bars_apart:
+        return False
+    return price2 > price1 and wt1[idx2] < wt1[idx1]
