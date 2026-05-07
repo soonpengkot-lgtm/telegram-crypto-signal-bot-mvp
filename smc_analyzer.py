@@ -287,16 +287,15 @@ def calculate_wavetrend(candles: list, n1: int = 10, n2: int = 21) -> tuple:
 
 def detect_wavetrend_bullish_divergence(
     candles: list, n1: int = 10, n2: int = 21, lookback: int = 50,
-    min_bars_apart: int = 5, oversold: float = -60.0
+    min_bars_apart: int = 5
 ) -> bool:
-    """Price lower low + WT1 higher low, both in oversold zone → bullish divergence."""
+    """Price lower low + WT1 higher low → bullish divergence (no zone filter)."""
     recent  = candles[-lookback:] if len(candles) >= lookback else candles
     warmup  = n1 + n2
     if len(recent) < warmup + 5:
         return False
     wt1, _  = calculate_wavetrend(recent, n1, n2)
-    lows    = [(i, p) for i, p in find_swing_lows(recent)
-               if i >= warmup and wt1[i] < oversold]
+    lows    = [(i, p) for i, p in find_swing_lows(recent) if i >= warmup]
     if len(lows) < 2:
         return False
     idx1, price1 = lows[-2]
@@ -308,16 +307,15 @@ def detect_wavetrend_bullish_divergence(
 
 def detect_wavetrend_bearish_divergence(
     candles: list, n1: int = 10, n2: int = 21, lookback: int = 50,
-    min_bars_apart: int = 5, overbought: float = 60.0
+    min_bars_apart: int = 5
 ) -> bool:
-    """Price higher high + WT1 lower high, both in overbought zone → bearish divergence."""
+    """Price higher high + WT1 lower high → bearish divergence (no zone filter)."""
     recent  = candles[-lookback:] if len(candles) >= lookback else candles
     warmup  = n1 + n2
     if len(recent) < warmup + 5:
         return False
     wt1, _  = calculate_wavetrend(recent, n1, n2)
-    highs   = [(i, p) for i, p in find_swing_highs(recent)
-               if i >= warmup and wt1[i] > overbought]
+    highs   = [(i, p) for i, p in find_swing_highs(recent) if i >= warmup]
     if len(highs) < 2:
         return False
     idx1, price1 = highs[-2]

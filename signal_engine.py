@@ -27,22 +27,22 @@ def _min_rr(symbol: str) -> float:
 
 
 def _btc_filter_long(symbol: str, btc_structures: dict) -> bool:
-    """Long allowed unless BTC 15m or 1H is bearish (for alts). BTC itself uses 4H only."""
+    """Long blocked only if BOTH BTC 15m AND 1H are bearish (for alts). BTC itself uses 4H only."""
     if symbol == "BTCUSDT":
         return btc_structures.get("4H", "ranging") != "bearish"
-    return (
-        btc_structures.get("15m", "ranging") != "bearish" and
-        btc_structures.get("1H",  "ranging") != "bearish"
+    return not (
+        btc_structures.get("15m", "ranging") == "bearish" and
+        btc_structures.get("1H",  "ranging") == "bearish"
     )
 
 
 def _btc_filter_short(symbol: str, btc_structures: dict) -> bool:
-    """Short allowed unless BTC 15m or 1H is bullish (for alts). BTC itself uses 4H only."""
+    """Short blocked only if BOTH BTC 15m AND 1H are bullish (for alts). BTC itself uses 4H only."""
     if symbol == "BTCUSDT":
         return btc_structures.get("4H", "ranging") != "bullish"
-    return (
-        btc_structures.get("15m", "ranging") != "bullish" and
-        btc_structures.get("1H",  "ranging") != "bullish"
+    return not (
+        btc_structures.get("15m", "ranging") == "bullish" and
+        btc_structures.get("1H",  "ranging") == "bullish"
     )
 
 
