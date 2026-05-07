@@ -2,14 +2,19 @@ name: SMC Signal Scan
 
 on:
   schedule:
-    - cron: '*/15 * * * *'   # every 15 minutes (UTC)
-  workflow_dispatch:           # allow manual trigger from GitHub UI
+    - cron: '*/15 * * * *'   # backup: every 15 minutes (UTC)
+  workflow_dispatch:           # manual trigger + self-dispatch chain
+
+concurrency:
+  group: smc-scan
+  cancel-in-progress: true    # new trigger cancels any sleeping run
 
 jobs:
   scan:
     runs-on: ubuntu-latest
     permissions:
-      contents: write          # needed to commit state.json back
+      contents: write          # commit state back
+      actions: write           # self-dispatch next run
 
     steps:
       - name: Checkout repo
@@ -39,3 +44,13 @@ jobs:
           git add data/
           git diff --staged --quiet || git commit -m "chore: update state [skip ci]"
           git push
+
+      - name: Schedule next run in 15 minutes
+        run: |
+          sleep 870
+          curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/scan.yml/dispatches" \
+            -d '{"ref":"main"}'
