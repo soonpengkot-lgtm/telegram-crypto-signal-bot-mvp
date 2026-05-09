@@ -2,7 +2,7 @@ name: SMC Signal Scan
 
 on:
   schedule:
-    - cron: '*/30 * * * *'   # every 30 minutes (UTC)
+    - cron: '*/15 * * * *'   # every 15 minutes (UTC)
   workflow_dispatch:           # manual trigger + self-dispatch chain
 
 concurrency:
