@@ -54,7 +54,7 @@ def detect_liquidity_sweep(candles: list) -> tuple[bool, float]:
     if not prior_lows:
         return False, 0.0
     _, sl_price = prior_lows[-1]
-    for c in candles[-4:]:
+    for c in candles[-8:]:
         if _l(c) < sl_price and _c(c) > sl_price:
             return True, sl_price
     return False, 0.0
@@ -68,7 +68,7 @@ def detect_choch(candles: list) -> tuple[bool, float]:
     if not prior_highs:
         return False, 0.0
     _, sh_price = prior_highs[-1]
-    for c in candles[-4:]:
+    for c in candles[-8:]:
         if _c(c) > sh_price:
             return True, sh_price
     return False, 0.0
@@ -117,7 +117,7 @@ def detect_liquidity_sweep_short(candles: list) -> tuple[bool, float]:
     if not prior_highs:
         return False, 0.0
     _, sh_price = prior_highs[-1]
-    for c in candles[-4:]:
+    for c in candles[-8:]:
         if _h(c) > sh_price and _c(c) < sh_price:
             return True, sh_price
     return False, 0.0
@@ -131,7 +131,7 @@ def detect_choch_bearish(candles: list) -> tuple[bool, float]:
     if not prior_lows:
         return False, 0.0
     _, sl_price = prior_lows[-1]
-    for c in candles[-4:]:
+    for c in candles[-8:]:
         if _c(c) < sl_price:
             return True, sl_price
     return False, 0.0
@@ -172,7 +172,7 @@ def find_fvg_bearish(candles: list, lookback: int = 20) -> tuple[float, float] |
 
 # ── Shared helpers ────────────────────────────────────────────────────
 
-def is_near_poi(price: float, poi: tuple[float, float], threshold: float = 0.015) -> bool:
+def is_near_poi(price: float, poi: tuple[float, float], threshold: float = 0.025) -> bool:
     poi_mid = (poi[0] + poi[1]) / 2
     return abs(price - poi_mid) / poi_mid <= threshold
 

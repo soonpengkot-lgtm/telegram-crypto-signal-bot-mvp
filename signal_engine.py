@@ -89,13 +89,13 @@ def _build_long(symbol, candles_15m, candles_1h, candles_4h, btc_structures) -> 
     min_rr = _min_rr(symbol)
 
     print(f"    [LONG] sweep={swept} choch={choch} wt_div={rsi_div} near_poi={near_poi} rr={rr:.2f}/{min_rr}")
-    if not (swept and choch and rsi_div and near_poi and rr >= min_rr):
+    if not (swept and (choch or rsi_div) and near_poi and rr >= min_rr):
         return None
 
+    conf_tag = "CHOCH + WT Div" if (choch and rsi_div) else ("15m Bullish CHOCH" if choch else "WaveTrend bullish divergence (15m)")
     conditions = [
         "Sweep lower liquidity confirmed",
-        "15m Bullish CHOCH",
-        "WaveTrend bullish divergence (15m)",
+        conf_tag,
         f"Retesting {poi_label} (holding)",
         f"BTC filter passed",
         f"RR {rr:.1f}R ≥ {min_rr}R",
@@ -160,13 +160,13 @@ def _build_short(symbol, candles_15m, candles_1h, candles_4h, btc_structures) ->
     min_rr = _min_rr(symbol)
 
     print(f"    [SHORT] sweep={swept} choch={choch} wt_div={rsi_div} near_poi={near_poi} rr={rr:.2f}/{min_rr}")
-    if not (swept and choch and rsi_div and near_poi and rr >= min_rr):
+    if not (swept and (choch or rsi_div) and near_poi and rr >= min_rr):
         return None
 
+    conf_tag = "CHOCH + WT Div" if (choch and rsi_div) else ("15m Bearish CHOCH" if choch else "WaveTrend bearish divergence (15m)")
     conditions = [
         "Sweep upper liquidity confirmed",
-        "15m Bearish CHOCH",
-        "WaveTrend bearish divergence (15m)",
+        conf_tag,
         f"Retesting {poi_label} (rejected)",
         f"BTC filter passed",
         f"RR {rr:.1f}R ≥ {min_rr}R",
