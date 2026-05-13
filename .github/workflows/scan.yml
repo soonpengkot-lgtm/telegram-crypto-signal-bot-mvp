@@ -45,6 +45,13 @@ jobs:
           git diff --staged --quiet || git commit -m "chore: update state [skip ci]"
           git push
 
+      - name: Alert on failure
+        if: failure()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "{\"chat_id\":\"${{ secrets.TELEGRAM_CHAT_ID }}\",\"text\":\"⚠️ [SMC Bot] Run #${{ github.run_number }} 失败\\n原因：请检查 GitHub Actions\\nhttps://github.com/${{ github.repository }}/actions\"}" || true
+
       - name: Trigger next scan in 15 minutes
         if: always()
         run: |
